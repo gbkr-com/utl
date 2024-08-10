@@ -16,17 +16,31 @@ type ConflatingQueue[K comparable, V any] struct {
 	index map[K]int  // The index of each key within the queue.
 	key   func(V) K  // The function to return the key for a given item.
 	lock  sync.Mutex //
+	pool  *Pool[V]   // Optional pool.
+}
+
+// ConflatingQueueOption is an option specified when a queue is manufactured.
+type ConflatingQueueOption[K comparable, V any] func(*ConflatingQueue[K, V])
+
+// WithPoolOption specifies that conflatd items need to be returned to a pool.
+func WithPoolOption[K comparable, V any](pool *Pool[V]) ConflatingQueueOption[K, V] {
+	return func(queue *ConflatingQueue[K, V]) {
+		queue.pool = pool
+	}
 }
 
 // NewConflatingQueue returns a [*ConflatingQueue] ready to use. The function
 // argument returns the key value for a given item.
-func NewConflatingQueue[K comparable, V any](key func(V) K) *ConflatingQueue[K, V] {
+func NewConflatingQueue[K comparable, V any](key func(V) K, options ...ConflatingQueueOption[K, V]) *ConflatingQueue[K, V] {
 	queue := &ConflatingQueue[K, V]{
 		queue: make([]V, 0, 128),
 		index: make(map[K]int),
 		key:   key,
 	}
 	queue.init()
+	for _, option := range options {
+		option(queue)
+	}
 	return queue
 }
 
@@ -50,6 +64,9 @@ func (x *ConflatingQueue[K, V]) Push(item V) {
 
 	index, present := x.index[key]
 	if present {
+		if x.pool != nil {
+			x.pool.Recycle(x.queue[index])
+		}
 		x.queue[index] = item
 		x.notify()
 		return

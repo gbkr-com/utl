@@ -16,21 +16,21 @@ func TestPoolWithValue(t *testing.T) {
 	)
 	assert.Equal(t, 2, len(pool.c))
 
-	next := pool.Pop()
+	next := pool.Get()
 	assert.Equal(t, 0, next)
 
-	next = pool.Pop()
-	assert.Equal(t, 0, next)
-	assert.Equal(t, 0, len(pool.c))
-
-	next = pool.Pop()
+	next = pool.Get()
 	assert.Equal(t, 0, next)
 	assert.Equal(t, 0, len(pool.c))
 
-	pool.Push(1)
+	next = pool.Get()
+	assert.Equal(t, 0, next)
+	assert.Equal(t, 0, len(pool.c))
+
+	pool.Recycle(1)
 	assert.Equal(t, 1, len(pool.c))
 
-	next = pool.Pop()
+	next = pool.Get()
 	assert.Equal(t, 0, next)
 
 }
@@ -51,26 +51,26 @@ func TestPoolWithRef(t *testing.T) {
 	)
 	assert.Equal(t, 2, len(pool.c))
 
-	first := pool.Pop()
+	first := pool.Get()
 	assert.NotNil(t, first)
 	assert.Equal(t, 0, first.i)
 
-	second := pool.Pop()
+	second := pool.Get()
 	assert.NotNil(t, second)
 	assert.Equal(t, 0, second.i)
 	assert.Equal(t, 0, len(pool.c), "pool now empty")
 
 	first.i = 1
-	pool.Push(first)
+	pool.Recycle(first)
 
-	first = pool.Pop()
+	first = pool.Get()
 	assert.NotNil(t, first)
 	assert.Equal(t, 0, first.i, "item has been zeroed")
 
-	pool.Pop()
+	pool.Get()
 	assert.Equal(t, 0, len(pool.c), "pool empty again")
 
-	next := pool.Pop()
+	next := pool.Get()
 	assert.NotNil(t, next)
 	assert.Equal(t, 0, next.i, "item was manufactured")
 

@@ -34,9 +34,9 @@ func NewPool[T any](n int, zero func(T) T) *Pool[T] {
 	return pool
 }
 
-// Pop returns a reusable item from the pool. If the pool is empty, a new zeroed
+// Get returns a reusable item from the pool. If the pool is empty, a new zeroed
 // item is created.
-func (x *Pool[T]) Pop() T {
+func (x *Pool[T]) Get() T {
 	select {
 	case t := <-x.c:
 		return t
@@ -46,8 +46,8 @@ func (x *Pool[T]) Pop() T {
 	}
 }
 
-// Push returns an item to the pool. The item is zeroed as it is added.
-func (x *Pool[T]) Push(t T) {
+// Recycle returns an item to the pool. The item is zeroed as it is added.
+func (x *Pool[T]) Recycle(t T) {
 	select {
 	case x.c <- x.z(t):
 	default:
