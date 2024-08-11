@@ -12,20 +12,29 @@ import "sync"
 // and a second call will return the price for 'B'.
 type ConflatingQueue[K comparable, V any] struct {
 	notifier
-	queue []V        // A slice of the items in arrival sequence but without duplicate keys.
-	index map[K]int  // The index of each key within the queue.
-	key   func(V) K  // The function to return the key for a given item.
-	lock  sync.Mutex //
-	pool  *Pool[V]   // Optional pool.
+	queue    []V          // A slice of the items in arrival sequence but without duplicate keys.
+	index    map[K]int    // The index of each key within the queue.
+	key      func(V) K    // The function to return the key for a given item.
+	lock     sync.Mutex   //
+	pool     *Pool[V]     // Optional pool.
+	conflate func(V, V) V // Optional conflate function.
 }
 
 // ConflatingQueueOption is an option specified when a queue is manufactured.
 type ConflatingQueueOption[K comparable, V any] func(*ConflatingQueue[K, V])
 
-// WithPoolOption specifies that conflatd items need to be returned to a pool.
+// WithPoolOption specifies that conflated items need to be returned to a pool.
 func WithPoolOption[K comparable, V any](pool *Pool[V]) ConflatingQueueOption[K, V] {
 	return func(queue *ConflatingQueue[K, V]) {
 		queue.pool = pool
+	}
+}
+
+// WithConflateOption specifies that the given function will be used to conflate
+// an item, rather than the default of substitution.
+func WithConflateOption[K comparable, V any](conflate func(existing, next V) V) ConflatingQueueOption[K, V] {
+	return func(queue *ConflatingQueue[K, V]) {
+		queue.conflate = conflate
 	}
 }
 
@@ -54,8 +63,9 @@ func (x *ConflatingQueue[K, V]) C() chan struct{} {
 	return x.c
 }
 
-// Push an item into the queue. The item will replace any existing item with the
-// same key value in the queue.
+// Push an item into the queue. If an item with the same key is in the queue:
+//   - If no [WithConflateOption] was specified this item will replace the existing item
+//   - If [WithConflateOption] was specified this item will be merged into the existing item using the provided function
 func (x *ConflatingQueue[K, V]) Push(item V) {
 	x.lock.Lock()
 	defer x.lock.Unlock()
@@ -64,10 +74,28 @@ func (x *ConflatingQueue[K, V]) Push(item V) {
 
 	index, present := x.index[key]
 	if present {
-		if x.pool != nil {
-			x.pool.Recycle(x.queue[index])
+		existing := x.queue[index]
+		switch {
+		case x.conflate != nil:
+			//
+			// Conflate the item then recycle 'item'.
+			//
+			item = x.conflate(existing, item)
+			x.queue[index] = item
+
+		case x.pool != nil:
+			//
+			// Replace and recycle the existing item.
+			//
+			x.queue[index] = item
+			x.pool.Recycle(existing)
+
+		default:
+			//
+			// Replace.
+			//
+			x.queue[index] = item
 		}
-		x.queue[index] = item
 		x.notify()
 		return
 	}
