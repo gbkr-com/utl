@@ -1,6 +1,9 @@
 package utl
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // Cache is an in-memory cache of items of type V each having a key K. There is
 // a fixed time-to-live for any item. Items retrieved that exceed that duration
@@ -10,6 +13,7 @@ type Cache[K comparable, V any] struct {
 	inserted map[K]time.Time
 	ttl      time.Duration
 	replace  func(K) (V, bool)
+	lock     sync.Mutex
 }
 
 // NewCache returns a new [*Cache] ready to use. The function argument is used
@@ -27,6 +31,9 @@ func NewCache[K comparable, V any](ttl time.Duration, replace func(K) (V, bool))
 // Get the item having the given key. Return also true if the item was found,
 // otherwise false.
 func (x *Cache[K, V]) Get(key K) (item V, ok bool) {
+
+	x.lock.Lock()
+	defer x.lock.Unlock()
 
 	when := x.inserted[key]
 
